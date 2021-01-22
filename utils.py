@@ -1,6 +1,9 @@
 from scipy.stats import norm 
 import numpy as np
 
+# TODO: Create an adaptive algorithm to generate the param_counts 
+# TODO: Detect the interpolation threshold using training loss ( < epsilon??)
+
 def approx_sigma(mu, max_params):
     """Approximates standard deviation of a normal distribution given 
     the maximum value and mean. In this context, the desired "interpolation 
@@ -107,7 +110,6 @@ def train_nn(model, dataloaders, criterion, optimizer, num_epochs=100):
     num_epochs : int
         The number of training epochs that the model will train over. One epoch is
         one full pass through the train and test loaders
-        
         
     Returns
     -------

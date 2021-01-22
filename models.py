@@ -1,9 +1,13 @@
+import sys
+sys.path.insert(1, '..')
+import torch
 import torch.nn as nn
 import torch.optim as optim
-import data
+import honors_work.data as data
 
 class Models:
     """This class contains the attributes that all models have in common.
+    All models will inherit from this class 
     
     ...
     Parameters (Not Attributes)
@@ -31,11 +35,11 @@ class Models:
                           'MSE': nn.MSELoss(), 
                           'CrossEntropy': nn.CrossEntropyLoss()}
         
-        self.loss = loss_functions[loss]
+        datasets = {'MNIST' : data.MNIST()}
         
-        # TODO: Add dataset object
-        self.dataloaders = dataset
-
+        self.loss = loss_functions[loss]
+        self.data = datasets[dataset]
+        
         if cuda and torch.cuda.is_available():
             self.device = torch.device('cuda')
         else:
@@ -69,15 +73,18 @@ class MultilayerPerceptron(Models):
             The upper bound for parameter count (Note: this is x10^3 for this model)
     """
     
-    def __init__(self, loss='MSE', dataset='MNIST', cuda=False, optim='SGD'):
+    def __init__(self, loss='MSE', dataset='MNIST', cuda=False, optimizer='SGD', min_param_count=1, max_param_count=100):
         super(MultilayerPerceptron, self).__init__(loss, dataset, cuda)
         
-        self.hidden = min_param_count
-        self.input_layer = nn.Linear(28 * 28,  * 10**3)
-        self.hidden_layer = nn.Linear(variable * 10**3, 10)
+        self.min_param_count = min_param_count
+        self.max_param_count = max_param_count
+        # TODO: Write layer sizes as function of data_dims
+        self.input_layer = nn.Linear(28 * 28, 10**3)
+        self.hidden_layer = nn.Linear(10**3, 10)
         self.mlp_optim = optim.SGD
     
     def forward(x):
+        # TODO: Write view as function of data_dims
         x = x.view(-1, 28 * 28)
         x = F.relu(self.input_layer(x))
         x = F.relu(self.hidden_layer(x))
