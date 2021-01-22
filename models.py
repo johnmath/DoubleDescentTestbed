@@ -1,4 +1,5 @@
 import torch.nn as nn
+import torch.optim as optim
 import data
 
 class Models:
@@ -19,7 +20,7 @@ class Models:
             GPU is available. If False, the model will train on CPU
     """
     
-    def __init__(self, loss, dataset):
+    def __init__(self, loss, dataset, cuda):
         
         loss_functions = {'L1': nn.L1Loss(), 
                           'MSE': nn.MSELoss(), 
@@ -27,6 +28,10 @@ class Models:
         
         self.loss = loss_functions[loss]
         self.dataset = dataset
+        self.cuda = cuda
+        
+    def train():
+        pass
         
         
     
@@ -37,17 +42,27 @@ class MultilayerPerceptron(Models):
     
     Attributes
     ----------
-        mlp_loss : str
+        loss : str
             The loss function for the model. Options are {'L1', 'MSE',
             'CrossEntropy'}.
-        mlp_dataset : str
+        dataset : str
             The dataset that the model will be trained on. Options are
             {'MNIST'}.
         cuda : bool
             If True, the model will train using GPU acceleration if a CUDA
             GPU is available. If False, the model will train on CPU
+        optim : str
+            The optimizer that the model will use while training. Options are
+            {'SGD'}
+        min
     """
     
-    def __init__(self, mlp_loss='MSE', mlp_dataset='MNIST'):
-        super(MultilayerPerceptron, self).__init__(mlp_loss, mlp_dataset)
+    def __init__(self, loss='MSE', dataset='MNIST', cuda=False, optim='SGD'):
+        super(MultilayerPerceptron, self).__init__(loss, dataset, cuda)
+    
         
+        self.mlp_optim = optim.S
+    
+    
+
+    

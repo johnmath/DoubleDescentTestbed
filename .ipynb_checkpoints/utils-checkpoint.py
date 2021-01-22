@@ -1,70 +1,27 @@
-import torch.nn as nn
-import torch.optim as optim
-import data
-
-class Models:
-    """This class contains the attributes that all models have in common.
+def approx_sigma(mu, max_params):
+    """Approximates standard deviation of a normal distribution given 
+    the maximum value and mean. In this context, the desired "interpolation 
+    threshold" will be the mean, and the desired maximum number of parameters will
+    be the maximum value. Using this, we can sample parameter sizes from a normal
+    distribution to avoid the computational cost that comes with training over all 
+    parameter sizes in some range
     
-    ...
-    
-    Attributes
+    Parameters
     ----------
-        loss : str
-            The loss function for the model. Options are {'L1', 'MSE', 
-            'CrossEntropy'}.
-        dataset : str
-            The dataset that the model will be trained on. Options are 
-            {'MNIST'}.
-        cuda : bool
-            If True, the model will train using GPU acceleration if a CUDA
-            GPU is available. If False, the model will train on CPU
+    mu : float
+        The chosen value for the interpolation threshold
+    max_params : int
+        The desired maximum number of parameters to train up to. 
+        The meaning of this will vary depending on the model and
+        the dataset. 
+        (Ex. The value max_params for an MLP training on MNIST would 
+        mean max_params * 10^3 parameters will be the maximum number of 
+        parameters)
     """
     
-    def __init__(self, loss, dataset, cuda):
-        
-        loss_functions = {'L1': nn.L1Loss(), 
-                          'MSE': nn.MSELoss(), 
-                          'CrossEntropy': nn.CrossEntropyLoss()}
-        
-        self.loss = loss_functions[loss]
-        self.dataset = dataset
-        self.cuda = cuda
-        
-    def train():
-        pass
-        
-        
-    
-class MultilayerPerceptron(Models):
-    """A Multilayer Perceptron with a single hidden layer of variable size
-    
-    ...
-    
-    Attributes
-    ----------
-        loss : str
-            The loss function for the model. Options are {'L1', 'MSE',
-            'CrossEntropy'}.
-        dataset : str
-            The dataset that the model will be trained on. Options are
-            {'MNIST'}.
-        cuda : bool
-            If True, the model will train using GPU acceleration if a CUDA
-            GPU is available. If False, the model will train on CPU
-        optim : str
-            The optimizer that the model will use while training. Options are
-            {'SGD'}
-    """
-    
-    def __init__(self, loss='MSE', dataset='MNIST', cuda=False, optim='SGD'):
-        super(MultilayerPerceptron, self).__init__(loss, dataset, cuda)
-    
-        
-        self.mlp_optim = optim.S
-    
-    
+    return -(mu - max_params)/3
 
-    
+
 def train_nn(model, dataloaders, criterion, optimizer, num_epochs=100):
     """Trains a neural network
     
@@ -105,8 +62,7 @@ def train_nn(model, dataloaders, criterion, optimizer, num_epochs=100):
         print('Epoch {}/{}'.format(epoch + 1, num_epochs))
         print('-' * 10)
         
-      # Switches between training and testing sets
-        
+        # Switches between training and testing sets
         for phase in ['train', 'test']:
             
             if phase == 'train':
@@ -117,8 +73,7 @@ def train_nn(model, dataloaders, criterion, optimizer, num_epochs=100):
                 model.eval()   # Set model to evaluate mode
                 running_test_loss = 0.0
 
-              # Train/Test loop
-
+            # Train/Test loop
             for inputs, labels in dataloaders[phase]:
 
                 inputs = inputs.cuda()
@@ -153,3 +108,4 @@ def train_nn(model, dataloaders, criterion, optimizer, num_epochs=100):
         print('Train Loss: {:.4f}\nTest Loss {:.4f}'.format(train_loss[epoch], test_acc[epoch]))
             
     return model, train_loss, test_acc
+
