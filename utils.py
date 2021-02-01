@@ -17,6 +17,7 @@ def approx_sigma(mu, max_params):
     to approximate the maximum value using max = mean - 3*sigma. Therefore, a rough
     approximate for the standard deviation would be sigma = (max - mean)/3.
     
+    ...
     Parameters
     ----------
     mu : int
@@ -39,11 +40,134 @@ def approx_sigma(mu, max_params):
     return (max_params - mu)/3
 
 
-def get_parameter_counts(mu, max_params, num_samples):
+def get_midpoints(x):
+    """Returns an array that contains all the midpoints of consecutive
+    values of the original array
+    
+    ...
+    Parameters
+    ----------
+    x : np.array
+        The x axis
+    
+    Returns
+    -------
+    midpoints : np.array
+        Array of midpoints of consecutve values in the original array
+    """
+    
+    return (x[1:] + x[:-1])/2
+
+    
+def derivative(x, y):
+    """Computes the discrete derivative of a function given values 
+    for x and y or f(x)
+    
+    ...
+    Parameters
+    ----------
+    x : np.array
+        The x axis
+    y : np.array
+        The y axis
+        
+        
+    Returns
+    -------
+    midpoints : np.array
+        The corresponding x axis for y' or f'(x)
+    dy : np.array
+        The discrete derivative of y or f(x) with respect to x
+    """
+    
+    if type(x) != np.ndarray:
+        x = np.array(x)
+        
+    if type(y) != np.ndarray:
+        y = np.array(y)
+    
+    assert len(x) == len(y)
+    return get_midpoints(x), np.diff(y)/np.diff(x)
+
+
+def get_next_param_count(param_counts, losses, past_dd=False, alpha=2):
+    """Predicts the next paramter count given a list of 
+    prior parameter counts and losses. This works by fitting
+    a third degree polynomial to the param_counts (independent 
+    variable) and the losses (dependent variable) and using the 
+    polynomial's derivative to detect when the interpolation 
+    threshold curve has been reached. This will make 
+    the spacing between the parameter counts differ depending 
+    on how close the model is to exhibiting double descent.
+    
+    ...
+    Parameters
+    ----------
+    param_counts : list or np.array of ints
+        The list of prior parameter counts that the model was
+        trained over
+    losses : list or np.array of floats
+        The list of final losses for each model with 
+        corresponding paramter counts
+    past_dd : bool
+        Flag to indicate whether the interpolation threshold
+        has been reached. Set to False by default.
+    alpha : float
+        Tuning paramter that increases or decreases the value of 
+        the next parameter count
+        
+    Returns
+    -------
+    param_count : int
+        The next parameter count
+    past_dd : bool
+        Flag that indicates whether the interpolation threshold
+        has been reached. This should be used as the input for
+        the next iteration of this algorithm
+    """
+    
+    current_iter = param_counts[-1]
+    
+    if type(losses) != np.ndarray:
+        losses = np.array(losses)
+        
+    if type(param_counts) != np.ndarray:
+        param_counts = np.array(param_counts)
+    
+    # Create weight vector
+    # We weight datapoints that are further away from
+    # the current parameter count less (1/n) depending on
+    # how many indices (n) away it is from the current one
+    w = np.arange(1,len(param_counts) + 1, 1)[-1::-1]
+    w = w/w.sum()
+    
+    poly = np.polyfit(param_counts[:], losses[:], 3, w=w)
+    
+    dy = 3*poly[0]*(current_iter - 10**-3)**2 + 2*poly[1]*(current_iter - 10**-3) + poly[2]
+    
+    # The current iteration of this adaptive parameter
+    # count algorithm does not use the second derivative
+    # dy2 = 6*poly[0]*(current_iter - 10**-3) + 2*poly[1]
+    
+    sgn = 1 if dy < 0 else 0
+    
+    if sgn == 0:
+        past_dd = True
+        
+    next_count = sgn*max(alpha*dy, 3) + 1
+    
+    if sgn and past_dd:
+        return ceil(next_count) + current_iter + 10, past_dd
+    
+    return ceil(next_count) + current_iter, past_dd
+
+
+def get_parameter_counts_prob(mu, max_params, num_samples):
     """Generate a list of paramter counts using a normal distribution
     centered around the parameter count that signifies the interpolation
     threshold
     
+    ...
     Parameters
     ----------
     mu : int
@@ -95,6 +219,7 @@ def get_parameter_counts(mu, max_params, num_samples):
 def train_nn(model, dataloaders, criterion, optimizer, num_epochs=100):
     """Trains a neural network
     
+    ...
     Parameters
     ----------
     model
