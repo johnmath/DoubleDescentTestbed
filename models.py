@@ -4,8 +4,11 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import honors_work.data as data
+import honors_work.utils as utils
+import torch.nn.functional as F
+import numpy as np
 
-class Models:
+class Models(nn.Module):
     """This class contains the attributes that all models have in common.
     All models will inherit from this class 
     
@@ -30,6 +33,7 @@ class Models:
     """
     
     def __init__(self, loss, dataset, cuda):
+        super(Models, self).__init__()
         
         loss_functions = {'L1': nn.L1Loss(), 
                           'MSE': nn.MSELoss(), 
@@ -67,31 +71,38 @@ class MultilayerPerceptron(Models):
         optim : str
             The optimizer that the model will use while training. Options are
             {'SGD'}    
-        min_param_count : int
-            The starting parameter count (Note: this is x10^3 for this model)
-        max_param_count : int
-            The upper bound for parameter count (Note: this is x10^3 for this model)
+        param_counts : np.array 
+            List of parameter counts that the model will be trained over.
+            Since this model is an MLP, these counts correspond to N*10^3 
+            neurons for a parameter count, N.
+        current_count : int
+            The index of the current parameter count in param_counts
+        losses : dict
+            Dictionary of lists of final losses for each model that 
+            is trained at each parameter count
+        scheduler : 
     """
     
-    def __init__(self, loss='MSE', dataset='MNIST', cuda=False, optimizer='SGD', min_param_count=1, max_param_count=100):
+    def __init__(self, loss='MSE', dataset='MNIST', cuda=False, optimizer='SGD'):
         super(MultilayerPerceptron, self).__init__(loss, dataset, cuda)
         
-        self.min_param_count = min_param_count
-        self.max_param_count = max_param_count
-        # TODO: Write layer sizes as function of data_dims
-        self.input_layer = nn.Linear(28 * 28, 10**3)
-        self.hidden_layer = nn.Linear(10**3, 10)
-        self.mlp_optim = optim.SGD
+        self.param_counts = np.array([1, 2, 3])
+        self.current_count = 0
+        self.input_layer = nn.Linear(self.data.data_x_dim * self.data.data_y_dim, 
+                                     self.param_counts[self.current_count]*10**3)
+        self.hidden_layer = nn.Linear(self.param_counts[self.current_count]*10**3, 10)
+        self.mlp_optim = optim.SGD([self.input_layer.weight, self.hidden_layer.weight], lr=.01, 
+                                   momentum=0.95)
+        self.scheduler = optim.lr_scheduler.StepLR(self.mlp_optim, step_size=500, gamma=0.1)
+        self.losses = {'train': np.array([]), 'test': np.array([])}
     
-    def forward(x):
-        # TODO: Write view as function of data_dims
-        x = x.view(-1, 28 * 28)
+    def forward(self, x):
+        x = x.view(-1, self.data.data_x_dim * self.data.data_y_dim)
         x = F.relu(self.input_layer(x))
         x = F.relu(self.hidden_layer(x))
         return F.log_softmax(x, dim=1)
         
-        
-    
-    
 
+                
+        
     

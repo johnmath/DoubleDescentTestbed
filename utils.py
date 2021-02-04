@@ -1,4 +1,8 @@
 from scipy.stats import norm 
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import torch.nn.functional as F
 import numpy as np
 
 # TODO: Create an adaptive algorithm to generate the param_counts 
@@ -216,7 +220,7 @@ def get_parameter_counts_prob(mu, max_params, num_samples):
     return sorted(list(set(parameter_counts)))
 
 
-def train_nn(model, dataloaders, criterion, optimizer, num_epochs=100):
+def train_nn(model, dataloaders, criterion, optimizer, scheduler, num_epochs=100):
     """Trains a neural network
     
     ...
@@ -251,10 +255,12 @@ def train_nn(model, dataloaders, criterion, optimizer, num_epochs=100):
     
     dataset_sizes = {'train': len(dataloaders['train'].dataset), 'test': len(dataloaders['test'].dataset) }
 
+    model = model.cuda()
+    
     for epoch in range(num_epochs):
             
-        print('Epoch {}/{}'.format(epoch + 1, num_epochs))
-        print('-' * 10)
+        #print('Epoch {}/{}'.format(epoch + 1, num_epochs))
+        # print('-' * 10)
         
         # Switches between training and testing sets
         for phase in ['train', 'test']:
@@ -268,14 +274,15 @@ def train_nn(model, dataloaders, criterion, optimizer, num_epochs=100):
 
             # Train/Test loop
             for inputs, labels in dataloaders[phase]:
-
+                
                 inputs = inputs.cuda()
                 labels = labels.cuda()
                 optimizer.zero_grad()
 
                 if phase == 'train':
                     with torch.set_grad_enabled(phase=='train'):
-                        outputs = model(inputs)
+                        outputs = model.forward(inputs)
+                        
                         loss = criterion(outputs, labels)
                         # backward + optimize only if in training phase
                         loss.backward()
@@ -285,16 +292,78 @@ def train_nn(model, dataloaders, criterion, optimizer, num_epochs=100):
 
                 if phase == 'test':
                     with torch.no_grad():
-                        outputs = model(inputs)
+                        outputs = model.forward(inputs)
                         test_loss = criterion(outputs, labels)
                         running_test_loss += test_loss.item() * inputs.size(0)
 
 #                     if phase == 'train':
 #                         scheduler.step()
-
-        train_loss.append(running_loss/ dataset_sizes['train'])
+        if phase == 'train':
+              scheduler.step()
+        
+        
+        train_loss.append(running_loss/ dataset_sizes['train'])        
         test_acc.append(running_test_loss/ dataset_sizes['test'])
-        print('Train Loss: {:.4f}\nTest Loss {:.4f}'.format(train_loss[epoch], test_acc[epoch]))
+        
+        if train_loss[-1] < 10**-5:
+            break
             
+        print(train_loss)
+        
+    print('Train Loss: {:.4f}\nTest Loss {:.4f}'.format(train_loss[-1], test_acc[-1]))
+    
     return model, train_loss, test_acc
 
+
+def dd_neural_network(model):
+    """
+    """
+    
+    
+    for index in range(len(model.param_counts)):
+        
+        model.input_layer = nn.Linear(model.data.data_x_dim * model.data.data_y_dim, 
+                                 model.param_counts[index]*10**3)
+        model.hidden_layer = nn.Linear(model.param_counts[index]*10**3, 10)
+        
+        model.mlp_optim = optim.SGD(model.parameters(), lr=.01, momentum=0.95)
+        model.scheduler = optim.lr_scheduler.StepLR(model.mlp_optim, step_size=500, gamma=0.1)
+
+        _, train_loss, test_loss = train_nn(model, model.data.dataloaders, 
+                                                  model.loss, model.mlp_optim, model.scheduler,
+                                                  num_epochs=6000)
+
+        model.losses['train'] = np.append(model.losses['train'], train_loss[-1])
+        model.losses['test'] = np.append(model.losses['test'], test_loss[-1])
+
+    model.current_count = len(model.param_counts) - 1
+    flag = False
+    post_flag = 0
+    
+    while post_flag < 4:
+
+        next_ct, flag = get_next_param_count_alt(model.param_counts, 
+                                                 model.losses['test']/model.losses['test'].sum(), 
+                                                 flag)
+
+        model.param_counts = np.append(model.param_counts, next_ct)
+        model.current_count += 1
+        model.input_layer = nn.Linear(model.data.data_x_dim * model.data.data_y_dim, 
+                                 model.param_counts[model.current_count]*10**3)
+        model.hidden_layer = nn.Linear(model.param_counts[model.current_count]*10**3, 10)
+        model.mlp_optim = optim.SGD([model.input_layer.weight, model.hidden_layer.weight], lr=.01, momentum=0.95)
+        model.scheduler = optim.lr_scheduler.StepLR(model.mlp_optim, step_size=500, gamma=0.1)
+
+        _, train_loss, test_loss = train_nn(model, model.data.dataloaders, 
+                                                  model.loss, model.mlp_optim, 
+                                                  model.scheduler, num_epochs=6000)
+
+        model.losses['train'] = np.append(model.losses['train'], train_loss[-1])
+        model.losses['test'] = np.append(model.losses['test'], test_loss[-1])
+
+        if flag and (model.param_counts[-1] - model.param_counts[-2]) != 1:
+            post_flag += 1
+
+        np.save('train_loss.npy', model.loss['train'])
+        np.save('test_loss.npy', model.loss['test'])
+        

@@ -66,8 +66,8 @@ class MNIST(Data):
         "train" and "test"
     """
     
-    def __init__(self, train_batch=64, test_batch=1000):
-        self.train_batch_size = test_batch
+    def __init__(self, train_batch=1, test_batch=1000):
+        self.train_batch_size = train_batch
         self.test_batch_size = test_batch
         
         self.train_loader = torch.utils.data.DataLoader( 
@@ -79,6 +79,11 @@ class MNIST(Data):
                                        torchvision.transforms.Normalize((0.1307,), (0.3081,))])),
                                 batch_size=self.train_batch_size, shuffle=True)
         
+        dataset = torch.utils.data.Subset(self.train_loader.dataset, range(0, 4000))
+        
+        self.train_loader = torch.utils.data.DataLoader(dataset, batch_size=self.train_batch_size, 
+                                                        shuffle=True)
+        
         self.test_loader = torch.utils.data.DataLoader( 
                         torchvision.datasets.MNIST('./data', 
                            train=False, 
@@ -86,9 +91,11 @@ class MNIST(Data):
                            transform=torchvision.transforms.Compose([
                                torchvision.transforms.ToTensor(),
                                torchvision.transforms.Normalize((0.1307,), (0.3081,))])),
-                        batch_size=self.test_batch_size, shuffle=True)
+                        batch_size=self.test_batch_size, shuffle=False)
         
-        self.dataloaders = {'train': self.train_loader, 'test': self.test_loader}
+        # Only use a subset of the MNIST dataset for MLP
+        self.dataloaders = {'train': self.train_loader,
+                            'test': self.test_loader}
         
         self.data_x_dim = self.train_loader.dataset[0][0].shape[1]
         self.data_y_dim = self.train_loader.dataset[0][0].shape[2]
