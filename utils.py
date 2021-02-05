@@ -1,9 +1,13 @@
 from scipy.stats import norm 
 import torch
+from math import ceil
 import torch.nn as nn
+from torch.utils.tensorboard import SummaryWriter
 import torch.optim as optim
+import torchvision
 import torch.nn.functional as F
 import numpy as np
+import matplotlib.pyplot as plt
 
 # TODO: Create an adaptive algorithm to generate the param_counts 
 # TODO: Detect the interpolation threshold using training loss ( < epsilon??)
@@ -147,7 +151,7 @@ def get_next_param_count(param_counts, losses, past_dd=False, alpha=2):
     
     poly = np.polyfit(param_counts[:], losses[:], 3, w=w)
     
-    dy = 3*poly[0]*(current_iter - 10**-3)**2 + 2*poly[1]*(current_iter - 10**-3) + poly[2]
+    dy = 3*poly[0]*(current_iter - 10**-4)**2 + 2*poly[1]*(current_iter - 10**-4) + poly[2]
     
     # The current iteration of this adaptive parameter
     # count algorithm does not use the second derivative
@@ -220,7 +224,7 @@ def get_parameter_counts_prob(mu, max_params, num_samples):
     return sorted(list(set(parameter_counts)))
 
 
-def train_nn(model, dataloaders, criterion, optimizer, scheduler, num_epochs=100):
+def train_nn(model, dataloaders, optimizer, scheduler, num_epochs=100):
     """Trains a neural network
     
     ...
@@ -250,12 +254,37 @@ def train_nn(model, dataloaders, criterion, optimizer, scheduler, num_epochs=100
         A list of all test losses at the end of each epoch
     """
     
+
+    writer = SummaryWriter('runs/dd_model_{}'.format(model.param_counts[model.current_count]))
+    
+    
+    # get some random training images
+    dataiter = iter(dataloaders['train'])
+    images, labels = dataiter.next()
+
+    # create grid of images
+    img_grid = torchvision.utils.make_grid(images)
+
+    # show images
+    matplotlib_imshow(img_grid, one_channel=True)
+
+    # write to tensorboard
+    writer.add_image('MNIST Dataset', img_grid)
+    writer.add_graph(model, images)
+    writer.close()
+    
     train_loss = []
     test_acc = []
     
     dataset_sizes = {'train': len(dataloaders['train'].dataset), 'test': len(dataloaders['test'].dataset) }
 
     model = model.cuda()
+    
+    optimizer = optim.SGD(model.parameters(), lr=.01, momentum=0.95)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=500, gamma=0.1)
+    
+    print('Model with parameter count {}'.format(model.param_counts[model.current_count]))
+    print('-' * 10)
     
     for epoch in range(num_epochs):
             
@@ -271,66 +300,83 @@ def train_nn(model, dataloaders, criterion, optimizer, scheduler, num_epochs=100
             elif phase == 'test':
                 model.eval()   # Set model to evaluate mode
                 running_test_loss = 0.0
-
+                
             # Train/Test loop
-            for inputs, labels in dataloaders[phase]:
+            for i, d in enumerate(dataloaders[phase], 0):
+                
+                inputs, labels = d
                 
                 inputs = inputs.cuda()
                 labels = labels.cuda()
                 optimizer.zero_grad()
 
                 if phase == 'train':
-                    with torch.set_grad_enabled(phase=='train'):
-                        outputs = model.forward(inputs)
-                        
-                        loss = criterion(outputs, labels)
-                        # backward + optimize only if in training phase
-                        loss.backward()
-                        optimizer.step()
-                        # statistics
-                        running_loss += loss.item() * inputs.size(0)
+                    outputs = model.forward(inputs)
+                    loss = model.loss(outputs, labels)
+                    # backward + optimize only if in training phase
+                    loss.backward()
+                    optimizer.step()
+                    # statistics
+                    running_loss += loss.item() * inputs.size(0)
 
                 if phase == 'test':
-                    with torch.no_grad():
-                        outputs = model.forward(inputs)
-                        test_loss = criterion(outputs, labels)
-                        running_test_loss += test_loss.item() * inputs.size(0)
+                    outputs = model.forward(inputs)
+                    test_loss = model.loss(outputs, labels)
+                    running_test_loss += test_loss.item() * inputs.size(0)
+                    
+                if i % 50 == 49:    # every 1000 mini-batches...
 
-#                     if phase == 'train':
-#                         scheduler.step()
-        if phase == 'train':
-              scheduler.step()
-        
-        
+                    # ...log the running loss
+                    writer.add_scalar('Training Loss',
+                                    running_loss / 1000,
+                                    epoch * len(dataloaders['train']) + i)
+
+                    # ...log a Matplotlib Figure showing the model's predictions on a
+                    # random mini-batch
+                    writer.add_figure('Predictions vs. Actuals',
+                                    plot_classes_preds(model, inputs, labels),
+                                    global_step=epoch * len(dataloaders['train']) + i)
+
+            if phase == 'train':
+                scheduler.step()
+                
         train_loss.append(running_loss/ dataset_sizes['train'])        
         test_acc.append(running_test_loss/ dataset_sizes['test'])
         
         if train_loss[-1] < 10**-5:
             break
-            
-        print(train_loss)
-        
+                    
     print('Train Loss: {:.4f}\nTest Loss {:.4f}'.format(train_loss[-1], test_acc[-1]))
     
     return model, train_loss, test_acc
 
 
 def dd_neural_network(model):
-    """
-    """
+    """Uses the train_nn and get_next_param_count methods 
+    to train the same architecture with varying parameter
+    sizes. This method also keeps track of the final losses 
+    of each model that is trained
     
+    ...
+    Parameters
+    ----------
+    model : Models instance
+        The model object that will be trained with varying 
+        parameter sizes
+        
+    Returns
+    -------
+    None
+    """
     
     for index in range(len(model.param_counts)):
         
         model.input_layer = nn.Linear(model.data.data_x_dim * model.data.data_y_dim, 
                                  model.param_counts[index]*10**3)
         model.hidden_layer = nn.Linear(model.param_counts[index]*10**3, 10)
-        
-        model.mlp_optim = optim.SGD(model.parameters(), lr=.01, momentum=0.95)
-        model.scheduler = optim.lr_scheduler.StepLR(model.mlp_optim, step_size=500, gamma=0.1)
 
-        _, train_loss, test_loss = train_nn(model, model.data.dataloaders, 
-                                                  model.loss, model.mlp_optim, model.scheduler,
+        _, train_loss, test_loss = train_nn(model, model.data.dataloaders
+                                                ,'SGD', 'scheduler',
                                                   num_epochs=6000)
 
         model.losses['train'] = np.append(model.losses['train'], train_loss[-1])
@@ -342,7 +388,7 @@ def dd_neural_network(model):
     
     while post_flag < 4:
 
-        next_ct, flag = get_next_param_count_alt(model.param_counts, 
+        next_ct, flag = get_next_param_count(model.param_counts, 
                                                  model.losses['test']/model.losses['test'].sum(), 
                                                  flag)
 
@@ -351,12 +397,9 @@ def dd_neural_network(model):
         model.input_layer = nn.Linear(model.data.data_x_dim * model.data.data_y_dim, 
                                  model.param_counts[model.current_count]*10**3)
         model.hidden_layer = nn.Linear(model.param_counts[model.current_count]*10**3, 10)
-        model.mlp_optim = optim.SGD([model.input_layer.weight, model.hidden_layer.weight], lr=.01, momentum=0.95)
-        model.scheduler = optim.lr_scheduler.StepLR(model.mlp_optim, step_size=500, gamma=0.1)
 
-        _, train_loss, test_loss = train_nn(model, model.data.dataloaders, 
-                                                  model.loss, model.mlp_optim, 
-                                                  model.scheduler, num_epochs=6000)
+        _, train_loss, test_loss = train_nn(model, model.data.dataloaders,
+                                            'SGD', 'scheduler', num_epochs=6000)
 
         model.losses['train'] = np.append(model.losses['train'], train_loss[-1])
         model.losses['test'] = np.append(model.losses['test'], test_loss[-1])
@@ -364,6 +407,53 @@ def dd_neural_network(model):
         if flag and (model.param_counts[-1] - model.param_counts[-2]) != 1:
             post_flag += 1
 
-        np.save('train_loss.npy', model.loss['train'])
-        np.save('test_loss.npy', model.loss['test'])
+        np.save('train_loss.npy', model.losses['train'])
+        np.save('test_loss.npy', model.losses['test'])
         
+        
+def matplotlib_imshow(img, one_channel=False):
+    if one_channel:
+        img = img.mean(dim=0)
+    img = img / 2 + 0.5     # unnormalize
+    npimg = img.cpu().numpy()
+    if one_channel:
+        plt.imshow(npimg, cmap="plasma")
+    else:
+        plt.imshow(np.transpose(npimg, (1, 2, 0)))
+        
+        
+        
+def images_to_probs(net, images):
+    '''
+    Generates predictions and corresponding probabilities from a trained
+    network and a list of images
+    '''
+    output = net(images)
+    # convert output probabilities to predicted class
+    _, preds_tensor = torch.max(output, 1)
+    preds_tensor = preds_tensor.cpu()
+    preds = np.squeeze(preds_tensor.numpy())
+    return preds, [F.softmax(el, dim=0)[i].item() for i, el in zip(preds, output)]
+
+
+def plot_classes_preds(net, images, labels):
+    '''
+    Generates matplotlib Figure using a trained network, along with images
+    and labels from a batch, that shows the network's top prediction along
+    with its probability, alongside the actual label, coloring this
+    information based on whether the prediction was correct or not.
+    Uses the "images_to_probs" function.
+    '''
+    preds, probs = images_to_probs(net, images)
+    classes = ('0', '1', '2', '3', '4', '5', '6', '7', '8', '9')
+    # plot the images in the batch, along with predicted and true labels
+    fig = plt.figure(figsize=(12, 48))
+    for idx in np.arange(4):
+        ax = fig.add_subplot(1, 4, idx+1, xticks=[], yticks=[])
+        matplotlib_imshow(images[idx], one_channel=True)
+        ax.set_title("{0}, {1:.1f}%\n(label: {2})".format(
+            classes[preds[idx]],
+            probs[idx] * 100.0,
+            classes[labels[idx]]),
+                    color=("green" if preds[idx]==labels[idx].item() else "red"))
+    return fig

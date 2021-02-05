@@ -66,7 +66,7 @@ class MNIST(Data):
         "train" and "test"
     """
     
-    def __init__(self, train_batch=1, test_batch=1000):
+    def __init__(self, train_batch=64, test_batch=64):
         self.train_batch_size = train_batch
         self.test_batch_size = test_batch
         

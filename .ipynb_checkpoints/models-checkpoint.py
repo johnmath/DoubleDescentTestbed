@@ -91,16 +91,16 @@ class MultilayerPerceptron(Models):
         self.input_layer = nn.Linear(self.data.data_x_dim * self.data.data_y_dim, 
                                      self.param_counts[self.current_count]*10**3)
         self.hidden_layer = nn.Linear(self.param_counts[self.current_count]*10**3, 10)
-        self.mlp_optim = optim.SGD([self.input_layer.weight, self.hidden_layer.weight], lr=.01, 
-                                   momentum=0.95)
-        self.scheduler = optim.lr_scheduler.StepLR(self.mlp_optim, step_size=500, gamma=0.1)
+#         self.mlp_optim = optim.SGD([self.input_layer.weight, self.hidden_layer.weight], lr=.01, 
+#                                    momentum=0.95)
+#         self.scheduler = optim.lr_scheduler.StepLR(self.mlp_optim, step_size=500, gamma=0.1)
         self.losses = {'train': np.array([]), 'test': np.array([])}
     
     def forward(self, x):
         x = x.view(-1, self.data.data_x_dim * self.data.data_y_dim)
         x = F.relu(self.input_layer(x))
         x = F.relu(self.hidden_layer(x))
-        return F.log_softmax(x, dim=1)
+        return x
         
 
                 
