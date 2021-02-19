@@ -1,8 +1,9 @@
 import torch
 import torchvision
 import torchvision.transforms as transforms
+from sklearn.datasets import fetch_openml
 
-class Data:
+class TorchData:
     """This class contains the attributes that all datasets have in common.
     All datasets will inherit from this class.
     
@@ -43,7 +44,7 @@ class Data:
 #         raise NotImplementedError
         
 
-class MNIST(Data):
+class MNIST(TorchData):
     """The MNIST Dataset (Handwritten Digits)
     
     ...
@@ -119,3 +120,47 @@ class MNIST(Data):
 #         @property
 #         def data_y_dim(self):
 #             return self.train_loader.dataset[0][0].shape[2]
+
+
+class SKLearnData:
+    
+    def __init__(self):
+        pass
+    
+    def get_mnist(samples=4000, filename):
+        """Returns a subset of the the MNIST Dataset as numpy arrays
+        
+        ...
+        Parameters
+        ----------
+        samples : int
+            The number of datapoints that the user wants to be 
+            returned. The size of the returned validation set 
+            will be samples/2
+        filename : str
+            The filename that the dataset will be saved to.
+
+        Returns
+        -------
+        X : np.array
+            Training set of 784 (28*28) dimensional vectors 
+            that correspond to 28x28 MNIST images
+        y : np.array
+            Labels for each of the vectors in X
+        X_val : np.array
+            Training set of 784 (28*28) dimensional vectors 
+            that correspond to 28x28 MNIST images
+        y_val : np.array
+            Labels for each of the vectors in X_val
+        """
+        
+        
+        X, y = fetch_openml('mnist_784', version=1, return_X_y=True, as_frame=False)
+        X_val = X[samples + 1:(samples + samples//2)]
+        y_val = y[samples + 1:(samples + samples//2)]
+        X = X[:samples + 1]
+        y = y[:samples + 1]
+        
+        return X, y, X_val, y_val
+        
+        
