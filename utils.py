@@ -8,6 +8,8 @@ import torchvision
 import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
+from sklearn.metrics import zero_one_loss
+from sklearn.metrics import mean_squared_error
 
 # TODO: Create an adaptive algorithm to generate the param_counts 
 # TODO: Detect the interpolation threshold using training loss ( < epsilon??)
@@ -254,9 +256,9 @@ def train_nn(model, dataloaders, optimizer, scheduler, num_epochs=100):
         A list of all test losses at the end of each epoch
     """
     
+    tb_utils = TensorBoardUtils()
 
     writer = SummaryWriter('runs/dd_model_{}'.format(model.param_counts[model.current_count]))
-    
     
     # get some random training images
     dataiter = iter(dataloaders['train'])
@@ -266,7 +268,7 @@ def train_nn(model, dataloaders, optimizer, scheduler, num_epochs=100):
     img_grid = torchvision.utils.make_grid(images)
 
     # show images
-    matplotlib_imshow(img_grid, one_channel=True)
+    tb_utils.matplotlib_imshow(img_grid, one_channel=True)
 
     # write to tensorboard
     writer.add_image('MNIST Dataset', img_grid)
@@ -334,7 +336,7 @@ def train_nn(model, dataloaders, optimizer, scheduler, num_epochs=100):
                     # ...log a Matplotlib Figure showing the model's predictions on a
                     # random mini-batch
                     writer.add_figure('Predictions vs. Actuals',
-                                    plot_classes_preds(model, inputs, labels),
+                                    tb_utils.plot_classes_preds(model, inputs, labels),
                                     global_step=epoch * len(dataloaders['train']) + i)
 
             if phase == 'train':
@@ -409,51 +411,122 @@ def dd_neural_network(model):
 
         np.save('train_loss.npy', model.losses['train'])
         np.save('test_loss.npy', model.losses['test'])
+        np.save('parameter_counts', model.param_counts)
+
         
+def labels_to_vec(labels, classes=10):
+    """Turns integer labels into one-hot vectors
+    
+    ...
+    Parameters
+    ----------
+    labels : np.array
+        The list of integer labels {0, 1, ... N}
+    classes : int
+        The number of classes in the dataset
         
-def matplotlib_imshow(img, one_channel=False):
-    if one_channel:
-        img = img.mean(dim=0)
-    img = img / 2 + 0.5     # unnormalize
-    npimg = img.cpu().numpy()
-    if one_channel:
-        plt.imshow(npimg, cmap="plasma")
-    else:
-        plt.imshow(np.transpose(npimg, (1, 2, 0)))
+    Returns
+    -------
+    label_vectors : np.array
+        Stack of one-hot vectors 
+    """
+    
+    out = []
+    for label in labels:
+        vec = np.array([0] * classes)
+        vec[int(label)] = 1
+        out.append(vec)
         
+    return np.stack(out)
+
+def sk_zero_one_loss(x, y):
+    """Utils wrapper for sk-learn zero_one_loss
+    
+    ...
+    Parameters
+    ----------
+    x : np.array
+        List of values/vectors to compare
+    y : np.array
+        List of values/vector to compare
         
+    Returns
+    -------
+    mse : np.array
+        Zero-one Loss of elements of x and y
+    """
+    
+    return zero_one_loss(x,y)
+
+def sk_mean_squared_error(x, y):
+    """Utils wrapper for sk-learn mean_squared_error
+    
+    ...
+    Parameters
+    ----------
+    x : np.array
+        List of values/vectors to compare
+    y : np.array
+        List of values/vector to compare
         
-def images_to_probs(net, images):
-    '''
-    Generates predictions and corresponding probabilities from a trained
-    network and a list of images
-    '''
-    output = net(images)
-    # convert output probabilities to predicted class
-    _, preds_tensor = torch.max(output, 1)
-    preds_tensor = preds_tensor.cpu()
-    preds = np.squeeze(preds_tensor.numpy())
-    return preds, [F.softmax(el, dim=0)[i].item() for i, el in zip(preds, output)]
+    Returns
+    -------
+    mse : np.array
+        Mean squared error of elements of x and y
+    """
+    
+    return mean_squared_error(x, y)
 
 
-def plot_classes_preds(net, images, labels):
-    '''
-    Generates matplotlib Figure using a trained network, along with images
-    and labels from a batch, that shows the network's top prediction along
-    with its probability, alongside the actual label, coloring this
-    information based on whether the prediction was correct or not.
-    Uses the "images_to_probs" function.
-    '''
-    preds, probs = images_to_probs(net, images)
-    classes = ('0', '1', '2', '3', '4', '5', '6', '7', '8', '9')
-    # plot the images in the batch, along with predicted and true labels
-    fig = plt.figure(figsize=(12, 48))
-    for idx in np.arange(4):
-        ax = fig.add_subplot(1, 4, idx+1, xticks=[], yticks=[])
-        matplotlib_imshow(images[idx], one_channel=True)
-        ax.set_title("{0}, {1:.1f}%\n(label: {2})".format(
-            classes[preds[idx]],
-            probs[idx] * 100.0,
-            classes[labels[idx]]),
-                    color=("green" if preds[idx]==labels[idx].item() else "red"))
-    return fig
+        
+class TensorBoardUtils:
+    
+    def __init__(self):
+        pass
+    
+    def matplotlib_imshow(self, img, one_channel=False):
+        if one_channel:
+            img = img.mean(dim=0)
+        img = img / 2 + 0.5     # unnormalize
+        npimg = img.cpu().numpy()
+        if one_channel:
+            plt.imshow(npimg, cmap="plasma")
+        else:
+            plt.imshow(np.transpose(npimg, (1, 2, 0)))
+
+
+
+    def images_to_probs(self, net, images):
+        '''
+        Generates predictions and corresponding probabilities from a trained
+        network and a list of images
+        '''
+        output = net(images)
+        # convert output probabilities to predicted class
+        _, preds_tensor = torch.max(output, 1)
+        preds_tensor = preds_tensor.cpu()
+        preds = np.squeeze(preds_tensor.numpy())
+        return preds, [F.softmax(el, dim=0)[i].item() for i, el in zip(preds, output)]
+
+
+    def plot_classes_preds(self, net, images, labels):
+        '''
+        Generates matplotlib Figure using a trained network, along with images
+        and labels from a batch, that shows the network's top prediction along
+        with its probability, alongside the actual label, coloring this
+        information based on whether the prediction was correct or not.
+        Uses the "images_to_probs" function.
+        '''
+        preds, probs = images_to_probs(net, images)
+        classes = ('0', '1', '2', '3', '4', '5', '6', '7', '8', '9')
+        # plot the images in the batch, along with predicted and true labels
+        fig = plt.figure(figsize=(12, 48))
+        for idx in np.arange(4):
+            ax = fig.add_subplot(1, 4, idx+1, xticks=[], yticks=[])
+            matplotlib_imshow(images[idx], one_channel=True)
+            ax.set_title("{0}, {1:.1f}%\n(label: {2})".format(
+                classes[preds[idx]],
+                probs[idx] * 100.0,
+                classes[labels[idx]]),
+                        color=("green" if preds[idx]==labels[idx].item() else "red"))
+        return fig

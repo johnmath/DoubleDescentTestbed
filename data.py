@@ -127,7 +127,7 @@ class SKLearnData:
     def __init__(self):
         pass
     
-    def get_mnist(samples=4000, filename):
+    def get_mnist(filename=None, samples=4000):
         """Returns a subset of the the MNIST Dataset as numpy arrays
         
         ...
@@ -153,7 +153,6 @@ class SKLearnData:
         y_val : np.array
             Labels for each of the vectors in X_val
         """
-        
         
         X, y = fetch_openml('mnist_784', version=1, return_X_y=True, as_frame=False)
         X_val = X[samples + 1:(samples + samples//2)]
