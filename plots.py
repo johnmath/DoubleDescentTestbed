@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
+import os
 import numpy as np
 
 class Plotter:
@@ -38,12 +39,13 @@ class Plotter:
         ax1.set_xlabel('Model parameters N_max_leaf/N_tree')
         ax1.set_ylabel('Squared Loss')
         ax1.plot(range(len(collected_data['mse_loss'])), collected_data['mse_loss'], color=color)
-
+        ax1.set_ylim(0, max(collected_data['train_loss']))
         ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
 
         color = 'tab:orange'
         ax2.plot(range(len(collected_data['train_loss'])), collected_data['train_loss'], color=color)
         ax2.axes.yaxis.set_visible(False)
+        ax2.set_ylim(0, max(collected_data['train_loss']))
         fig.tight_layout()  # otherwise the right y-label is slightly clipped
 
 
@@ -53,12 +55,13 @@ class Plotter:
         test = mlines.Line2D([], [], color='tab:blue',
                                   markersize=15, label='Test')
 
+        plt.legend(handles=[train, test])
+
         plt.xticks(custom_ticks_x, custom_ticks_label)
 
 
-        plt.legend(handles=[train, test])
-
-        plt.savefig('dd_random_forest_squared.jpg')
+        os.mkdir('random-forest-figures')
+        plt.savefig('random-forest-figures/dd_random_forest_squared.jpg')
         plt.close()
         
         # ---------------------------------------------------
@@ -73,11 +76,13 @@ class Plotter:
         ax1.set_xlabel('Model parameters N_max_leaf/N_tree')
         ax1.set_ylabel('Zero-One Loss (%)')
         ax1.plot(range(len(collected_data['zero_one_loss'])), collected_data['zero_one_loss'], color=color)
-
+        ax1.set_ylim(0, max(collected_data['train_loss']))
+        
         ax2 = ax1.twinx()
         color = 'tab:orange'
         ax2.plot(range(len(collected_data['train_loss'])), collected_data['train_loss'], color=color)
         ax2.axes.yaxis.set_visible(False)
+        ax2.set_ylim(0, max(collected_data['train_loss']))
         fig.tight_layout()  
 
         train = mlines.Line2D([], [], color='tab:orange',
@@ -90,7 +95,6 @@ class Plotter:
         plt.legend(handles=[train, test])
 
         plt.xticks(custom_ticks_x, custom_ticks_label)
-
-        plt.xlabel
-        plt.savefig('dd_rf_zero_one.jpg')
+        
+        plt.savefig('random-forest-figures/dd_rf_zero_one.jpg')
         plt.close()

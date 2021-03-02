@@ -1,4 +1,6 @@
 import torch
+import honors_work.utils as utils
+import numpy as np
 import torchvision
 import torchvision.transforms as transforms
 from sklearn.datasets import fetch_openml
@@ -25,24 +27,6 @@ class TorchData:
         self.test_loader = None
         self.data_x_dim = None
         self.data_y_dim = None
-
-#     @property
-#     @abstractmethod
-#     def train_loader(self):
-#         raise NotImplementedError
-
-#     @property
-#     def test_loader(self):
-#         raise NotImplementedError
-
-#     @property
-#     def data_x_dim(self):
-#         raise NotImplementedError
-
-#     @property
-#     def data_y_dim(self):
-#         raise NotImplementedError
-        
 
 class MNIST(TorchData):
     """The MNIST Dataset (Handwritten Digits)
@@ -100,26 +84,6 @@ class MNIST(TorchData):
         
         self.data_x_dim = self.train_loader.dataset[0][0].shape[1]
         self.data_y_dim = self.train_loader.dataset[0][0].shape[2]
-        
-#         @property
-#         def train_batch_size(self):
-#             return self.train_batch_size
-        
-#         @property
-#         def test_batch_size(self):
-#             return self.test_batch_size
-
-#         @property
-#         def test_loader(self):
-#             return self.test_loader
-        
-#         @property
-#         def data_x_dim(self):
-#             return self.train_loader.dataset[0][0].shape[1]
-
-#         @property
-#         def data_y_dim(self):
-#             return self.train_loader.dataset[0][0].shape[2]
 
 
 class SKLearnData:
@@ -153,8 +117,15 @@ class SKLearnData:
         y_val : np.array
             Labels for each of the vectors in X_val
         """
-        
+        print('Fetching MNIST')
         X, y = fetch_openml('mnist_784', version=1, return_X_y=True, as_frame=False)
+        
+        for i in range(len(y)):
+            if np.random.randint(low=0, high=6) == 6:
+                y[i] = np.random.randint(low=0, high=9)
+            else:
+                pass
+        
         X_val = X[samples + 1:(samples + samples//2)]
         y_val = y[samples + 1:(samples + samples//2)]
         X = X[:samples + 1]

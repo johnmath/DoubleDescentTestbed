@@ -11,9 +11,6 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import zero_one_loss
 from sklearn.metrics import mean_squared_error
 
-# TODO: Create an adaptive algorithm to generate the param_counts 
-# TODO: Detect the interpolation threshold using training loss ( < epsilon??)
-
 def approx_sigma(mu, max_params):
     """Approximates standard deviation of a normal distribution given 
     the maximum value and mean. In this context, the desired "interpolation 
@@ -226,131 +223,6 @@ def get_parameter_counts_prob(mu, max_params, num_samples):
     return sorted(list(set(parameter_counts)))
 
 
-def train_nn(model, dataloaders, optimizer, scheduler, num_epochs=100):
-    """Trains a neural network
-    
-    ...
-    Parameters
-    ----------
-    model
-        A PyTorch neural network object (Only strict requirement is that 
-        the object has a .forward() method)
-    dataloaders : dict
-        Dictionary in the format {"train": <train_loader>, "test": <test_loader>}
-        where <train_loader> and <test_loader> are PyTorch Dataloaders
-    criterion : torch.nn Loss Function
-        Loss function that the neural network will use to train and validate the data
-    optimizer : torch.optim optimizer
-        Optimizer that model will use to minimize the loss
-    num_epochs : int
-        The number of training epochs that the model will train over. One epoch is
-        one full pass through the train and test loaders
-        
-    Returns
-    -------
-    model
-         A PyTorch neural network object that has been trained
-    train_loss : list
-        A list of all training losses at the end of each epoch
-    test_acc : list
-        A list of all test losses at the end of each epoch
-    """
-    
-    tb_utils = TensorBoardUtils()
-
-    writer = SummaryWriter('runs/dd_model_{}'.format(model.param_counts[model.current_count]))
-    
-    # get some random training images
-    dataiter = iter(dataloaders['train'])
-    images, labels = dataiter.next()
-
-    # create grid of images
-    img_grid = torchvision.utils.make_grid(images)
-
-    # show images
-    tb_utils.matplotlib_imshow(img_grid, one_channel=True)
-
-    # write to tensorboard
-    writer.add_image('MNIST Dataset', img_grid)
-    writer.add_graph(model, images)
-    writer.close()
-    
-    train_loss = []
-    test_acc = []
-    
-    dataset_sizes = {'train': len(dataloaders['train'].dataset), 'test': len(dataloaders['test'].dataset) }
-
-    model = model.cuda()
-    
-    optimizer = optim.SGD(model.parameters(), lr=.01, momentum=0.95)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=500, gamma=0.1)
-    
-    print('Model with parameter count {}'.format(model.param_counts[model.current_count]))
-    print('-' * 10)
-    
-    for epoch in range(num_epochs):
-            
-        #print('Epoch {}/{}'.format(epoch + 1, num_epochs))
-        # print('-' * 10)
-        
-        # Switches between training and testing sets
-        for phase in ['train', 'test']:
-            
-            if phase == 'train':
-                model.train()
-                running_loss = 0.0
-            elif phase == 'test':
-                model.eval()   # Set model to evaluate mode
-                running_test_loss = 0.0
-                
-            # Train/Test loop
-            for i, d in enumerate(dataloaders[phase], 0):
-                
-                inputs, labels = d
-                
-                inputs = inputs.cuda()
-                labels = labels.cuda()
-                optimizer.zero_grad()
-
-                if phase == 'train':
-                    outputs = model.forward(inputs)
-                    loss = model.loss(outputs, labels)
-                    # backward + optimize only if in training phase
-                    loss.backward()
-                    optimizer.step()
-                    # statistics
-                    running_loss += loss.item() * inputs.size(0)
-
-                if phase == 'test':
-                    outputs = model.forward(inputs)
-                    test_loss = model.loss(outputs, labels)
-                    running_test_loss += test_loss.item() * inputs.size(0)
-                    
-                if i % 50 == 49:    # every 1000 mini-batches...
-
-                    # ...log the running loss
-                    writer.add_scalar('Training Loss',
-                                    running_loss / 1000,
-                                    epoch * len(dataloaders['train']) + i)
-
-                    # ...log a Matplotlib Figure showing the model's predictions on a
-                    # random mini-batch
-                    writer.add_figure('Predictions vs. Actuals',
-                                    tb_utils.plot_classes_preds(model, inputs, labels),
-                                    global_step=epoch * len(dataloaders['train']) + i)
-
-            if phase == 'train':
-                scheduler.step()
-                
-        train_loss.append(running_loss/ dataset_sizes['train'])        
-        test_acc.append(running_test_loss/ dataset_sizes['test'])
-        
-        if train_loss[-1] < 10**-5:
-            break
-                    
-    print('Train Loss: {:.4f}\nTest Loss {:.4f}'.format(train_loss[-1], test_acc[-1]))
-    
-    return model, train_loss, test_acc
 
 
 def dd_neural_network(model):
@@ -372,6 +244,9 @@ def dd_neural_network(model):
     """
     
     for index in range(len(model.param_counts)):
+        
+        # When getting weights, wrap as a parameter to assign to new nn.linear layer
+        # See if number of params can be changed in place
         
         model.input_layer = nn.Linear(model.data.data_x_dim * model.data.data_y_dim, 
                                  model.param_counts[index]*10**3)
