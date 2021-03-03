@@ -90,7 +90,7 @@ class MultilayerPerceptron(TorchModels):
         """TEMP DOCSTRING"""
 
         def __init__(self, current_count, data, param_counts):
-
+            super(MLP, self).__init__()
             self.data_dims = (data.data_x_dim, data.data_y_dim)
 
             self.input_layer = nn.Linear(self.data_dims[0] * self.data_dims[1],
@@ -141,7 +141,19 @@ class MultilayerPerceptron(TorchModels):
         return classifier.hidden_layer
     
     
+    
+    
     def reinitialize_classifier(self):
+        new_layer1 = nn.Linear(self.data.data_x_dim * self.data.data_y_dim,
+                               self.param_counts[self.current_count]*10**3)
+        
+        new_layer2 = nn.Linear(self.param_counts[self.current_count]*10**3, 
+                               self.data.num_classes)
+        new_layer1.weight.data.normal_(0, .01)
+        new_layer2.weight.data.normal_(0, .01)
+
+        new_layer1.weight[:10**4] = model.layer1.weight
+        new_layer2.weight[:,:10**4] = model.layer2.weight[:]
             
     
     def train(self, model, dataloaders, optimizer, scheduler, num_epochs=100):
@@ -292,65 +304,61 @@ class MultilayerPerceptron(TorchModels):
         """
         
         # Run if user wants to use a manually created parameter count list
+
+            
+            
+        while self.current_count < len(self.param_counts):
+
+            _, train_loss, test_loss = self.train(self.classifier)
+
+            self.losses['train'] = np.append(self.losses['train'], train_loss[-1])
+            self.losses['test'] = np.append(self.losses['test'], test_loss[-1])
+
+            self.current_count += 1
+            if self.current_count < len(self.param_counts):
+                self.reinitialize_classifier()
+
+            np.save('train_loss.npy', self.losses['train'])
+            np.save('test_loss.npy', self.losses['test'])
+            np.save('parameter_counts', self.param_counts)
+                
         if not self.generate_parameters:
             
-            for count in self.param_counts:
-                
-                _, train_loss, test_loss = self.train(self.classifier)
-                
-                self.losses['train'] = np.append(self.losses['train'], train_loss[-1])
-                self.losses['test'] = np.append(self.losses['test'], test_loss[-1])
-                
-                np.save('train_loss.npy', self.losses['train'])
-                np.save('test_loss.npy', self.losses['test'])
-                np.save('parameter_counts', self.param_counts)
-                
             return {'train_loss': self.losses['train'],
-                    'test_loss': self.losses['test']
+                    'test_loss': self.losses['test'],
                     'parameter_counts': self.param_counts}
         
         
-        # Otherwise, use parameter adaptation algorithm
-        for index in range(1, len(model.param_counts)):
-
-            # When getting weights, wrap as a parameter to assign to new nn.linear layer
-            # See if number of params can be changed in place
-            self.classifier = self.MLP(index, self.data, self.param_counts)
-            _, train_loss, test_loss = train_nn(model, model.data.dataloaders
-                                                    ,'SGD', 'scheduler',
-                                                      num_epochs=6000)
-
-            model.losses['train'] = np.append(model.losses['train'], train_loss[-1])
-            model.losses['test'] = np.append(model.losses['test'], test_loss[-1])
-
-        model.current_count = len(model.param_counts) - 1
+        self.current_count -= 1
         flag = False
         post_flag = 0
 
         while post_flag < 4:
 
-            next_ct, flag = get_next_param_count(model.param_counts, 
-                                                     model.losses['test']/model.losses['test'].sum(), 
-                                                     flag)
+            next_ct, flag = utils.get_next_param_count(self.param_counts, 
+                                                 self.losses['test']/self.losses['test'].sum(), 
+                                                 flag)
 
-            model.param_counts = np.append(model.param_counts, next_ct)
-            model.current_count += 1
-            model.input_layer = nn.Linear(model.data.data_x_dim * model.data.data_y_dim, 
-                                     model.param_counts[model.current_count]*10**3)
-            model.hidden_layer = nn.Linear(model.param_counts[model.current_count]*10**3, 10)
+            self.param_counts = np.append(self.param_counts, next_ct)
+            self.current_count += 1
+            self.reinitialize_classifier()
 
-            _, train_loss, test_loss = train_nn(model, model.data.dataloaders,
-                                                'SGD', 'scheduler', num_epochs=6000)
+            _, train_loss, test_loss = self.train(self.classifier)
 
-            model.losses['train'] = np.append(model.losses['train'], train_loss[-1])
-            model.losses['test'] = np.append(model.losses['test'], test_loss[-1])
+            self.losses['train'] = np.append(self.losses['train'], train_loss[-1])
+            self.losses['test'] = np.append(self.losses['test'], test_loss[-1])
 
-            if flag and (model.param_counts[-1] - model.param_counts[-2]) != 1:
+            if flag and (self.param_counts[-1] - self.param_counts[-2]) != 1:
                 post_flag += 1
 
-            np.save('train_loss.npy', model.losses['train'])
-            np.save('test_loss.npy', model.losses['test'])
-            np.save('parameter_counts', model.param_counts)
+            np.save('train_loss.npy', self.losses['train'])
+            np.save('test_loss.npy', self.losses['test'])
+            np.save('parameter_counts', self.param_counts)
+        
+        return {'train_loss': self.losses['train'],
+                'test_loss': self.losses['test'],
+                'parameter_counts': self.param_counts}
+    
     
 
     

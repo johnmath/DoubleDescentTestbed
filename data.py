@@ -84,7 +84,8 @@ class MNIST(TorchData):
         
         self.data_x_dim = self.train_loader.dataset[0][0].shape[1]
         self.data_y_dim = self.train_loader.dataset[0][0].shape[2]
-
+        self.classes = list(set([self.dataloaders['train'].dataset[i][1] for i in range(len(self.dataloaders['train']))]))
+        self.num_classes = len(self.classes)
 
 class SKLearnData:
     
