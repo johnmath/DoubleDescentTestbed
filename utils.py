@@ -314,6 +314,11 @@ def labels_to_vec(labels, classes=10):
         
     return np.stack(out)
 
+def torch_zero_one_loss(outputs, labels):
+    """TEMP DOCSTRING"""
+    
+    return torch.div((torch.argmax(outputs, dim=1) != labels).sum().double(), len(labels))
+
 def sk_zero_one_loss(x, y):
     """Utils wrapper for sk-learn zero_one_loss
     

@@ -37,14 +37,14 @@ class TorchModels():
             GPU is available. If False, the model will train on CPU
     """
     
-    def __init__(self, loss, dataset, cuda):
+    def __init__(self, loss, dataset, training_samples, cuda):
         super(TorchModels, self).__init__()
         
         loss_functions = {'L1': nn.L1Loss(), 
                           'MSE': nn.MSELoss(), 
                           'CrossEntropy': nn.CrossEntropyLoss()}
         
-        datasets = {'MNIST' : data.MNIST()}
+        datasets = {'MNIST' : data.MNIST(training_samples=training_samples)}
         
         self.loss = loss_functions[loss]
         self.data = datasets[dataset]
@@ -90,14 +90,14 @@ class MultilayerPerceptron(TorchModels):
     class MLP(nn.Module):
         """TEMP DOCSTRING"""
 
-        def __init__(self, current_count, data, param_counts):
+        def __init__(self, current_count, data, param_counts, factor):
             super().__init__()
             self.data_dims = (data.data_x_dim, data.data_y_dim)
 
             self.input_layer = nn.Linear(self.data_dims[0] * self.data_dims[1],
-                                         param_counts[current_count]*10**3)
+                                         param_counts[current_count]*factor)
 
-            self.hidden_layer = nn.Linear(param_counts[current_count]*10**3, 10)
+            self.hidden_layer = nn.Linear(param_counts[current_count]*factor, data.num_classes)
             
         def forward(self, x):
             x = x.view(-1, self.data_dims[0] * self.data_dims[1])
@@ -116,14 +116,21 @@ class MultilayerPerceptron(TorchModels):
                  gamma=.1, 
                  current_count=0, 
                  param_counts=np.array([1, 2, 3]),
-                 generate_parameters=True):
+                 generate_parameters=True,
+                 training_samples=4000,
+                 factor=10**3,
+                 reuse_weights=True):
         
-        super(MultilayerPerceptron, self).__init__(loss, dataset, cuda)
+        super(MultilayerPerceptron, self).__init__(loss, dataset, training_samples, cuda)
         
         self.param_counts = param_counts
         self.current_count = current_count
+        self.post_flag = 0
         self.generate_parameters = generate_parameters
-        self.model = self.MLP(self.current_count, self.data, self.param_counts)   
+        self.factor = factor
+        self.reuse_weights = reuse_weights
+        self.model = self.MLP(self.current_count, self.data, self.param_counts, self.factor)  
+
         
         optim_dict = {'SGD': optim.SGD(self.model.parameters(), lr=learning_rate, momentum=momentum)}
         
@@ -132,7 +139,10 @@ class MultilayerPerceptron(TorchModels):
                                                    step_size=scheduler_step_size, 
                                                    gamma=gamma)
         
-        self.losses = {'train': np.array([]), 'test': np.array([])}
+        self.losses = {'train': np.array([]), 
+                       'test': np.array([]), 
+                       'zero_one_train': np.array([]), 
+                       'zero_one_test': np.array([])}
         
         
     @property
@@ -149,22 +159,23 @@ class MultilayerPerceptron(TorchModels):
         """Uses new parameter count to initialize the next MLP.
         The N weights from the previous model are transplanted into 
         the first N spots of the new model with M > N parameters"""
-        new_input_layer = nn.Linear(self.data.data_x_dim * self.data.data_y_dim,
-                               self.param_counts[self.current_count]*10**3)
         
-        new_hidden_layer = nn.Linear(self.param_counts[self.current_count]*10**3, 
-                               self.data.num_classes)
-        new_input_layer.weight.data.normal_(0, .01)
-        new_hidden_layer.weight.data.normal_(0, .01)
+        new_model = self.MLP(self.current_count, self.data, self.param_counts, self.factor)
 
-        new_input_layer.weight[:self.param_counts[self.current_count]*10**3] = self.model.input_layer.weight
-        new_hidden_layer.weight[:,:self.param_counts[self.current_count]*10**3] = self.model.hidden_layer.weight[:]
+        if self.reuse_weights:
+                 
+            in_weights = torch.randn_like(new_model.input_layer.weight)*.01
+            hidden_weights = torch.randn_like(new_model.hidden_layer.weight)*.01
+                 
+            in_weights[:self.param_counts[self.current_count - 1]*10**3] = self.model.input_layer.weight
+            hidden_weights[:,:self.param_counts[self.current_count - 1]*10**3] = self.model.hidden_layer.weight[:]
+
+            new_model.input_layer.weights = torch.nn.Parameter(data=in_weights)
+            new_model.hidden_layer.weights = torch.nn.Parameter(data=hidden_weights)
         
-        self.model.input_layer = new_input_layer
-        self.model.hidden_layer = new_hidden_layer
-            
+        self.model = new_model
     
-    def train(self, max_epochs=6000):
+    def train(self, max_epochs=100):
         """Trains the MLP model using the selected loss function,
         optimizer, and scheduler. This also outputs to tensorboard.
         To access all of the summaries for trained models, run the 
@@ -187,14 +198,14 @@ class MultilayerPerceptron(TorchModels):
         test_acc : list
             A list of all test losses at the end of each epoch
         """
-
+        
         tb_utils = TensorBoardUtils()
         model_writer = SummaryWriter(f'mlp-runs/dd_model_{self.param_counts[self.current_count]}')
 
         # get some random training images
         dataiter = iter(self.data.dataloaders['train'])
         images, labels = dataiter.next()
-
+        
         # create grid of images
         img_grid = torchvision.utils.make_grid(images)
 
@@ -208,14 +219,15 @@ class MultilayerPerceptron(TorchModels):
 
         train_loss = []
         test_acc = []
-
-        self.model = self.model.cuda()
+        zero_one_loss = []
+        zero_one_acc = []
 
         print('Model with parameter count {}'.format(self.param_counts[self.current_count]))
         print('-' * 10)
 
+        self.model = self.model.cuda()
+        
         for epoch in range(max_epochs):
-
             #print('Epoch {}/{}'.format(epoch + 1, num_epochs))
             # print('-' * 10)
 
@@ -225,9 +237,11 @@ class MultilayerPerceptron(TorchModels):
                 if phase == 'train':
                     self.model.train()
                     running_loss = 0.0
+                    running_zero_one_loss = 0.0
                 elif phase == 'test':
                     self.model.eval()   # Set model to evaluate mode
                     running_test_loss = 0.0
+                    running_zero_one_acc = 0.0
 
                 # Train/Test loop
                 for i, d in enumerate(self.data.dataloaders[phase], 0):
@@ -237,19 +251,22 @@ class MultilayerPerceptron(TorchModels):
                     inputs = inputs.cuda()
                     labels = labels.cuda()
                     self.mlp_optim.zero_grad()
-
+                                        
                     if phase == 'train':
                         outputs = self.model.forward(inputs)
                         loss = self.loss(outputs, labels)
                         # backward + optimize only if in training phase
                         loss.backward()
                         self.mlp_optim.step()
-                        # statistics
+                        zero_one_train = utils.torch_zero_one_loss(outputs, labels)
+                        running_zero_one_loss += zero_one_train.item() * inputs.size(0)
                         running_loss += loss.item() * inputs.size(0)
 
                     if phase == 'test':
                         outputs = self.model.forward(inputs)
                         test_loss = self.loss(outputs, labels)
+                        zero_one_test = utils.torch_zero_one_loss(outputs, labels)
+                        running_zero_one_acc += zero_one_test.item() * inputs.size(0)
                         running_test_loss += test_loss.item() * inputs.size(0)
                         
                 if phase == 'train':
@@ -257,6 +274,8 @@ class MultilayerPerceptron(TorchModels):
 
             train_loss.append(running_loss/ self.data.dataset_sizes['train'])        
             test_acc.append(running_test_loss/ self.data.dataset_sizes['test'])
+            zero_one_loss.append(running_zero_one_loss/self.data.dataset_sizes['test'])
+            zero_one_acc.append(running_zero_one_acc/self.data.dataset_sizes['test'])
             
             model_writer.add_scalar(f'Train-Loss/{self.param_counts[self.current_count]}*10^3 hidden units',
                               train_loss[-1],
@@ -266,12 +285,20 @@ class MultilayerPerceptron(TorchModels):
                               test_acc[-1],
                               epoch)
 
-            if train_loss[-1] < 10**-5:
+            model_writer.add_scalar(f'Train-Loss/{self.param_counts[self.current_count]}*10^3 hidden units (Zero-One)',
+                                    zero_one_loss[-1],
+                                    epoch)
+            
+            model_writer.add_scalar(f'Test-Loss/{self.param_counts[self.current_count]}*10^3 hidden units (Zero-One)',
+                                    zero_one_acc[-1],
+                                    epoch)
+            
+            if zero_one_loss[-1] == 0 and self.post_flag == 0:
                 break
 
         print('Train Loss: {:.4f}\nTest Loss {:.4f}'.format(train_loss[-1], test_acc[-1]))
 
-        return model, train_loss, test_acc
+        return self.model, train_loss, test_acc, zero_one_loss, zero_one_acc
     
     
     def double_descent(self):
@@ -292,8 +319,10 @@ class MultilayerPerceptron(TorchModels):
         None
         """
         try:
-            os.makedir('mlp-output')
-        except:
+            os.makedirs('mlp-output')
+        except Exception as E:
+            print('Could not make mlp-output')
+            print(E)
             pass
         
         try:
@@ -304,36 +333,48 @@ class MultilayerPerceptron(TorchModels):
         dd_writer = SummaryWriter('mlp-runs/double-descent')
         while self.current_count < len(self.param_counts):
 
-            _, train_loss, test_loss = self.train()
+            _, train_loss, test_loss, zero_one_train, zero_one_test = self.train()
 
             self.losses['train'] = np.append(self.losses['train'], train_loss[-1])
             self.losses['test'] = np.append(self.losses['test'], test_loss[-1])
-            dd_writer.add_scalar('Double-Descent/Train', self.losses['train'][-1], 
+            self.losses['zero_one_train'] = np.append(self.losses['zero_one_train'], zero_one_train[-1])
+            self.losses['zero_one_test'] = np.append(self.losses['zero_one_test'], zero_one_test[-1])
+            
+            dd_writer.add_scalar('Double-Descent/Train', 
+                                 self.losses['train'][-1], 
                                  self.param_counts[self.current_count])
-            dd_writer.add_scalar('Double-Descent/Test', self.losses['test'][-1], 
+            dd_writer.add_scalar('Double-Descent/Test', 
+                                 self.losses['test'][-1], 
+                                 self.param_counts[self.current_count])
+            dd_writer.add_scalar('Double-Descent/Train (Zero-One)', 
+                                 self.losses['zero_one_train'][-1], 
+                                 self.param_counts[self.current_count])
+            dd_writer.add_scalar('Double-Descent/Test (Zero-One)', 
+                                 self.losses['zero_one_test'][-1], 
                                  self.param_counts[self.current_count])
             self.current_count += 1
+            
             if self.current_count < len(self.param_counts):
                 self.reinitialize_classifier()
-            
-            
-            
+        
             np.save('mlp-output/train_loss.npy', self.losses['train'])
             np.save('mlp-output/test_loss.npy', self.losses['test'])
+            np.save('mlp-output/zero_one_train.npy', self.losses['zero_one_train'])
+            np.save('mlp-output/zero_one_test.npy', self.losses['zero_one_test'])
             np.save('mlp-output/parameter_counts', self.param_counts)
                 
         if not self.generate_parameters:
             
             return {'train_loss': self.losses['train'],
                     'test_loss': self.losses['test'],
+                    'zero_one_train': self.losses['zero_one_train'],
+                    'zero_one_test': self.losses['zero_one_test'],
                     'parameter_counts': self.param_counts}
         
         
         self.current_count -= 1
         flag = False
-        post_flag = 0
-
-        while post_flag < 4:
+        while self.post_flag < 4:
 
             next_ct, flag = utils.get_next_param_count(self.param_counts, 
                                                  self.losses['test']/self.losses['test'].sum(), 
@@ -343,26 +384,40 @@ class MultilayerPerceptron(TorchModels):
             self.current_count += 1
             self.reinitialize_classifier()
 
-            _, train_loss, test_loss = self.train()
+            _, train_loss, test_loss, zero_one_train, zero_one_test = self.train()
 
             self.losses['train'] = np.append(self.losses['train'], train_loss[-1])
             self.losses['test'] = np.append(self.losses['test'], test_loss[-1])
+            self.losses['zero_one_train'] = np.append(self.losses['zero_one_train'], zero_one_train[-1])
+            self.losses['zero_one_test'] = np.append(self.losses['zero_one_test'], zero_one_test[-1])
             
-            dd_writer.add_scalar('Double-Descent/Train', self.losses['train'][-1], 
+            dd_writer.add_scalar('Double-Descent/Train', 
+                                 self.losses['train'][-1], 
                                  self.param_counts[self.current_count])
-            dd_writer.add_scalar('Double-Descent/Test', self.losses['test'][-1], 
+            dd_writer.add_scalar('Double-Descent/Test', 
+                                 self.losses['test'][-1], 
+                                 self.param_counts[self.current_count])
+            dd_writer.add_scalar('Double-Descent/Train (Zero-One)', 
+                                 self.losses['zero_one_train'][-1], 
+                                 self.param_counts[self.current_count])
+            dd_writer.add_scalar('Double-Descent/Test (Zero-One)', 
+                                 self.losses['zero_one_test'][-1], 
                                  self.param_counts[self.current_count])
 
             if flag and (self.param_counts[-1] - self.param_counts[-2]) != 1:
-                post_flag += 1
+                self.post_flag += 1
 
             np.save('mlp-output/train_loss.npy', self.losses['train'])
             np.save('mlp-output/test_loss.npy', self.losses['test'])
+            np.save('mlp-output/zero_one_train.npy', self.losses['zero_one_train'])
+            np.save('mlp-output/zero_one_test.npy', self.losses['zero_one_test'])
             np.save('mlp-output/parameter_counts', self.param_counts)
         
-        return {'train_loss': self.losses['train'],
-                'test_loss': self.losses['test'],
-                'parameter_counts': self.param_counts}
+            return {'train_loss': self.losses['train'],
+                    'test_loss': self.losses['test'],
+                    'zero_one_train': self.losses['zero_one_train'],
+                    'zero_one_test': self.losses['zero_one_test'],
+                    'parameter_counts': self.param_counts}
     
     
 

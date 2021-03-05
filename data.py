@@ -51,9 +51,10 @@ class MNIST(TorchData):
         "train" and "test"
     """
     
-    def __init__(self, train_batch=64, test_batch=64):
+    def __init__(self, training_samples=4000, train_batch=128, test_batch=128):
         self.train_batch_size = train_batch
         self.test_batch_size = test_batch
+        self.training_samples = training_samples
         
         self.train_loader = torch.utils.data.DataLoader( 
                                 torchvision.datasets.MNIST('./data', 
@@ -64,9 +65,11 @@ class MNIST(TorchData):
                                        torchvision.transforms.Normalize((0.1307,), (0.3081,))])),
                                 batch_size=self.train_batch_size, shuffle=True)
         
-        dataset = torch.utils.data.Subset(self.train_loader.dataset, range(0, 4000))
+        train_dataset = torch.utils.data.Subset(self.train_loader.dataset,
+                                                range(0, training_samples))
         
-        self.train_loader = torch.utils.data.DataLoader(dataset, batch_size=self.train_batch_size, 
+        self.train_loader = torch.utils.data.DataLoader(train_dataset,
+                                                        batch_size=self.train_batch_size, 
                                                         shuffle=True)
         
         self.test_loader = torch.utils.data.DataLoader( 
@@ -77,6 +80,13 @@ class MNIST(TorchData):
                                torchvision.transforms.ToTensor(),
                                torchvision.transforms.Normalize((0.1307,), (0.3081,))])),
                         batch_size=self.test_batch_size, shuffle=False)
+        
+        test_dataset = torch.utils.data.Subset(self.train_loader.dataset, 
+                                               range(0, int(training_samples//.75) - training_samples))
+        
+        self.test_loader = torch.utils.data.DataLoader(test_dataset, 
+                                                       batch_size=self.test_batch_size,
+                                                       shuffle=True)
         
         # Only use a subset of the MNIST dataset for MLP
         self.dataloaders = {'train': self.train_loader,
@@ -94,7 +104,7 @@ class SKLearnData:
     def __init__(self):
         pass
     
-    def get_mnist(filename=None, samples=4000):
+    def get_mnist(filename=None, samples=100):
         """Returns a subset of the the MNIST Dataset as numpy arrays
         
         ...
