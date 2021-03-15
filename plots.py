@@ -33,13 +33,16 @@ class Plotter:
         plt.figure(figsize=(10, 20))
         fig, ax1 = plt.subplots()
 
-        plt.title('Random Forest on MNIST')
+        dataset = collected_data['dataset']
+        samples = collected_data['samples']
+
+        plt.title(f'Random Forest on {dataset}; {samples} samples')
 
         color = 'tab:blue'
         ax1.set_xlabel('Model parameters N_max_leaf/N_tree')
         ax1.set_ylabel('Squared Loss')
         ax1.plot(range(len(collected_data['mse_loss'])), collected_data['mse_loss'], color=color)
-        ax1.set_ylim(0, max(collected_data['train_loss']))
+        ax1.set_ylim(0, max(collected_data['mse_loss']))
         ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
 
         color = 'tab:orange'
@@ -59,9 +62,21 @@ class Plotter:
 
         plt.xticks(custom_ticks_x, custom_ticks_label)
 
-
-        os.mkdir('random-forest-figures')
-        plt.savefig('random-forest-figures/dd_random_forest_squared.jpg')
+        try:
+            os.mkdir('random-forest-figures')
+        except:
+            pass
+        
+        try:
+            os.mkdir('random-forest-figures/squared_loss')
+        except:
+            pass
+        
+        directory = os.listdir('random-forest-figures/squared_loss')
+        
+        path = f'random-forest-figures/squared_loss/dd_random_forest_squared_{len(directory)}.jpg'
+        
+        plt.savefig(path)
         plt.close()
         
         # ---------------------------------------------------
@@ -69,14 +84,17 @@ class Plotter:
         plt.figure(figsize=(10, 20))
         
         fig, ax1 = plt.subplots()
+        
+        dataset = collected_data['dataset']
+        samples = collected_data['samples']
 
-        plt.title('Random Forest on MNIST')
+        plt.title(f'Random Forest on {dataset}; {samples} samples')
 
         color = 'tab:blue'
         ax1.set_xlabel('Model parameters N_max_leaf/N_tree')
         ax1.set_ylabel('Zero-One Loss (%)')
         ax1.plot(range(len(collected_data['zero_one_loss'])), collected_data['zero_one_loss'], color=color)
-        ax1.set_ylim(0, max(collected_data['train_loss']))
+        ax1.set_ylim(0, max(collected_data['zero_one_loss']))
         
         ax2 = ax1.twinx()
         color = 'tab:orange'
@@ -96,5 +114,20 @@ class Plotter:
 
         plt.xticks(custom_ticks_x, custom_ticks_label)
         
-        plt.savefig('random-forest-figures/dd_rf_zero_one.jpg')
+        
+        try:
+            os.mkdir('random-forest-figures')
+        except:
+            pass
+        
+        try:
+            os.mkdir('random-forest-figures/zero_one')
+        except:
+            pass
+        
+        directory = os.listdir('random-forest-figures/zero_one')
+        
+        path = f'random-forest-figures/zero_one/dd_rf_zero_one_{len(directory)}.jpg'
+        
+        plt.savefig(path)
         plt.close()

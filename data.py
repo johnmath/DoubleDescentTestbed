@@ -4,6 +4,7 @@ import numpy as np
 import torchvision
 import torchvision.transforms as transforms
 from sklearn.datasets import fetch_openml
+import os
 
 class TorchData:
     """This class contains the attributes that all datasets have in common.
@@ -52,6 +53,7 @@ class MNIST(TorchData):
     """
     
     def __init__(self, training_samples=4000, train_batch=128, test_batch=128):
+        print('Initializing MNIST')
         self.train_batch_size = train_batch
         self.test_batch_size = test_batch
         self.training_samples = training_samples
@@ -81,7 +83,7 @@ class MNIST(TorchData):
                                torchvision.transforms.Normalize((0.1307,), (0.3081,))])),
                         batch_size=self.test_batch_size, shuffle=False)
         
-        test_dataset = torch.utils.data.Subset(self.train_loader.dataset, 
+        test_dataset = torch.utils.data.Subset(self.test_loader.dataset, 
                                                range(0, int(training_samples//.75) - training_samples))
         
         self.test_loader = torch.utils.data.DataLoader(test_dataset, 
@@ -130,14 +132,19 @@ class SKLearnData:
         y_val : np.array
             Labels for each of the vectors in X_val
         """
-        print('Fetching MNIST')
-        X, y = fetch_openml('mnist_784', version=1, return_X_y=True, as_frame=False)
+
         
-        for i in range(len(y)):
-            if np.random.randint(low=0, high=6) == 6:
-                y[i] = np.random.randint(low=0, high=9)
-            else:
-                pass
+        if os.path.exists('scikit_learn_data/X_saved.npy') and os.path.exists('scikit_learn_data/Y_saved.npy'):    
+            X = np.load('scikit_learn_data/X_saved.npy')
+            y = np.load('scikit_learn_data/Y_saved.npy', allow_pickle=True)
+        else:
+            print('Fetching MNIST')
+            X, y = fetch_openml('mnist_784', version=1, return_X_y=True, as_frame=False)
+            np.save('scikit_learn_data/X_saved.npy', X)
+            np.save('scikit_learn_data/Y_saved.npy', y)
+        
+        if (samples + samples//2) > X.shape[0] - 1:
+            samples = X.shape[0] - 1
         
         X_val = X[samples + 1:(samples + samples//2)]
         y_val = y[samples + 1:(samples + samples//2)]

@@ -47,8 +47,9 @@ class TorchModels():
         
         self.loss = loss_functions[loss]
         self.data = datasets[dataset]
+        self.cuda = cuda
         
-        if cuda and torch.cuda.is_available():
+        if self.cuda and torch.cuda.is_available():
             self.device = torch.device('cuda')
         else:
             self.device = torch.device('cpu')     
@@ -91,6 +92,8 @@ class MultilayerPerceptron(TorchModels):
 
         def __init__(self, current_count, data, param_counts, factor, hidden_layer_size):
             super().__init__()
+            print(f'Initializing MLP with {hidden_layer_size} hidden units')
+
             self.data_dims = (data.data_x_dim, data.data_y_dim)
             
             self.input_layer = nn.Linear(self.data_dims[0] * self.data_dims[1],
@@ -101,7 +104,7 @@ class MultilayerPerceptron(TorchModels):
         def forward(self, x):
             x = x.view(-1, self.data_dims[0] * self.data_dims[1])
             x = F.relu(self.input_layer(x))
-            x = F.relu(self.hidden_layer(x))
+            x = F.sigmoid(self.hidden_layer(x))
             return x
     
     
@@ -113,7 +116,7 @@ class MultilayerPerceptron(TorchModels):
                  learning_rate=.01, 
                  momentum=.95, 
                  scheduler_step_size=500, 
-                 gamma=.1, 
+                 gamma=.9, 
                  current_count=0, 
                  param_counts=np.array([1, 2, 3]),
                  generate_parameters=True,
@@ -129,6 +132,7 @@ class MultilayerPerceptron(TorchModels):
             torch.manual_seed(seed)
         self.param_counts = param_counts
         self.current_count = current_count
+        self.samples = training_samples
         self.post_flag = 0
         self.generate_parameters = generate_parameters
         self.factor = factor
@@ -198,6 +202,9 @@ class MultilayerPerceptron(TorchModels):
         
         self.mlp_optim = self.optim_dict[self.optimizer]
         
+        if self.param_counts[self.current_count] * self.factor > self.samples * self.data.num_classes:
+            self.gamma = 1
+            
         self.scheduler = optim.lr_scheduler.StepLR(self.mlp_optim, 
                                                    step_size=self.scheduler_step_size, 
                                                    gamma=self.gamma) 
@@ -253,7 +260,8 @@ class MultilayerPerceptron(TorchModels):
         print('Model with parameter count {}'.format(self.param_counts[self.current_count]))
         print('-' * 10)
 
-        self.model = self.model.cuda()
+        if self.cuda:
+            self.model = self.model.cuda()
                 
         for epoch in range(self.max_epochs):
             #print('Epoch {}/{}'.format(epoch + 1, num_epochs))
@@ -275,9 +283,10 @@ class MultilayerPerceptron(TorchModels):
                 for i, d in enumerate(self.data.dataloaders[phase], 0):
 
                     inputs, labels = d
-
-                    inputs = inputs.cuda()
-                    labels = labels.cuda()
+                    
+                    if self.cuda:
+                        inputs = inputs.cuda()
+                        labels = labels.cuda()
                     self.mlp_optim.zero_grad()
                                         
                     if phase == 'train':
@@ -305,24 +314,21 @@ class MultilayerPerceptron(TorchModels):
             zero_one_loss.append(running_zero_one_loss/self.data.dataset_sizes['train'])
             zero_one_acc.append(running_zero_one_acc/self.data.dataset_sizes['test'])
             
-            model_writer.add_scalar(f'Train-Loss/{self.param_counts[self.current_count]}*{self.factor} hidden units',
+            model_writer.add_scalar(f'Train-Loss/{self.hidden_layer_size} hidden units; {self.param_counts[self.current_count]}*{self.factor} total parameters',
                               train_loss[-1],
                              epoch)
             
-            model_writer.add_scalar(f'Test-Loss/{self.param_counts[self.current_count]}*{self.factor} hidden units',
+            model_writer.add_scalar(f'Test-Loss/{self.hidden_layer_size} hidden units; {self.param_counts[self.current_count]}*{self.factor} total parameters',
                               test_acc[-1],
                               epoch)
 
-            model_writer.add_scalar(f'Train-Loss/{self.param_counts[self.current_count]}*{self.factor} hidden units (Zero-One)',
+            model_writer.add_scalar(f'Train-Loss/{self.hidden_layer_size} hidden units; {self.param_counts[self.current_count]}*{self.factor} total parameters (Zero-One)',
                                     zero_one_loss[-1],
                                     epoch)
             
-            model_writer.add_scalar(f'Test-Loss/{self.param_counts[self.current_count]}*{self.factor} hidden units (Zero-One)',
+            model_writer.add_scalar(f'Test-Loss/{self.hidden_layer_size} hidden units; {self.param_counts[self.current_count]}*{self.factor} total parameters (Zero-One)',
                                     zero_one_acc[-1],
                                     epoch)
-            
-#             if len(test_acc) > 3 and abs(test_acc[-1] - test_acc[-2]) < 10**-5 and abs(test_acc[-2] - test_acc[-3]) < 10**-5:
-#                 break
             
             
             if (zero_one_loss[-1] == 0 or train_loss[-1] < 10**-5):
@@ -520,10 +526,12 @@ class RandomForest(SKLearnModels):
                  leaves_limit=2000,
                  tree_limit=20,
                  leaves_iter=100,
-                 trees_iter=1):
+                 tree_iter=1):
         
+        self.dataset_name = dataset
         super(RandomForest, self).__init__(dataset, samples)
         self.N_tree = N_tree
+        self.samples = samples
         self.N_max_leaves = N_max_leaves
         self.bootstrap = bootstrap
         self.criterion = criterion
@@ -591,7 +599,7 @@ class RandomForest(SKLearnModels):
             self.N_max_leaves += self.leaves_iter
             self.reinitialize_classifier()
 
-        self.N_max_leaves = self.N_max_leaves - self.N_max_leaves
+        self.N_max_leaves = self.N_max_leaves - self.leaves_iter
         while self.N_tree <= self.tree_limit:
             
             self.reinitialize_classifier()
@@ -622,6 +630,8 @@ class RandomForest(SKLearnModels):
                 'zero_one_loss': zero_one_test_losses,
                 'mse_loss': mse_losses,
                 'leaf_sizes': np.array(leaf_sizes), 
-                'trees': np.array(trees)}
+                'trees': np.array(trees),
+                'samples': self.samples,
+                'dataset': self.dataset_name}
             
     

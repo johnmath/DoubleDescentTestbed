@@ -170,7 +170,9 @@ def get_next_param_count(param_counts, losses, past_dd=False, alpha=2):
 
 
 def get_parameter_counts_prob(mu, max_params, num_samples):
-    """Generate a list of paramter counts using a normal distribution
+    """NOT BEING USED ANYMORE
+    
+    Generate a list of paramter counts using a normal distribution
     centered around the parameter count that signifies the interpolation
     threshold
     
