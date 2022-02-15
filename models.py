@@ -3,10 +3,10 @@ sys.path.insert(1, '..')
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
-import honors_work.data as data
-from honors_work.data import utils
-from honors_work.utils import TensorBoardUtils, torchvision, np
-from honors_work.data import torch
+import DoubleDescentTestbed.data as data
+from DoubleDescentTestbed.data import utils
+from DoubleDescentTestbed.utils import TensorBoardUtils, torchvision, np
+from DoubleDescentTestbed.data import torch
 import torch.nn.functional as F
 import os, shutil
 from sklearn.ensemble import RandomForestClassifier
