@@ -53,3 +53,16 @@ Throughout training, statistics are aggregated. At the end of the experiment, we
 ```python
 save_obj(outs, 'mlp-dd-experiment-no-reuse')
 ```
+
+
+### Using TensorBoard
+
+To use TensorBoard with compatible models, simply begin running an experiment (e.g. run the code above), open a new terminal window in the same directory, and run the following command: 
+
+`tensorboard --logdir mlp-runs`
+
+This will launch a web server on your computer that you can access by pasting the link output by this command into your browser. The link will be something like: 
+
+`http://localhost:6006/`
+
+To view the latest aggregated statistics from your experiment, just refresh the page. This command will keep track of any changes that are made to the mlp-runs directory and publish them to the web page. For more specific details on flags for this command, please check the [TensorBoard documentation site](https://www.tensorflow.org/tensorboard/get_started)

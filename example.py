@@ -1,4 +1,4 @@
-from honors_work.models import MultilayerPerceptron
+from DoubleDescentTestbed.models import MultilayerPerceptron
 import numpy as np
 import pickle
 
