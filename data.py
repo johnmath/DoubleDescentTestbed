@@ -8,7 +8,7 @@ import os
 
 class TorchData:
     """This class contains the attributes that all datasets have in common.
-    All datasets will inherit from this class.
+    All datasets will inherit from this class
     
     ...
     Attributes

@@ -14,7 +14,7 @@ from sklearn.ensemble import RandomForestClassifier
 
 class TorchModels():
     """This class contains the attributes that all PyTorch models 
-    have in common. All PyTorch models will inherit from this class 
+    have in common. All PyTorch models will inherit from this class
     
     ...
     Parameters (Not Attributes)

@@ -65,4 +65,4 @@ This will launch a web server on your computer that you can access by pasting th
 
 `http://localhost:6006/`
 
-To view the latest aggregated statistics from your experiment, just refresh the page. This command will keep track of any changes that are made to the mlp-runs directory and publish them to the web page. For more specific details on flags for this command, please check the [TensorBoard documentation site](https://www.tensorflow.org/tensorboard/get_started)
+To view the latest aggregated statistics from your experiment, just refresh the page. This command will keep track of any changes that are made to the mlp-runs directory and publish them to the web page. For more specific details on flags for this command, please check the [TensorBoard documentation site](https://www.tensorflow.org/tensorboard/get_started).
