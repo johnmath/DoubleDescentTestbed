@@ -34,6 +34,8 @@ class TorchModels():
         cuda : bool
             If True, the model will train using GPU acceleration if a CUDA
             GPU is available. If False, the model will train on CPU
+        training_samples : int
+            Desired number of elements from the training set
     """
     
     def __init__(self, loss, dataset, batch_size, training_samples, cuda):
@@ -56,40 +58,62 @@ class TorchModels():
         
     
 class MultilayerPerceptron(TorchModels):
-    """A wrapper for a Multilayer Perceptron with a single hidden layer of variable size
+    """A wrapper for a multilayer perceptron with a single hidden layer of variable size
     
     ...
-    Parameters (Not Attributes)
-    ---------------------------
-        cuda : bool
-            If True, the model will train using GPU acceleration if a CUDA
-            GPU is available. If False, the model will train on CPU
-            
+    
     Attributes
     ----------
+        
         loss : str
-            The loss function for the model. Options are {'L1', 'MSE',
-            'CrossEntropy'}.
+            The loss function for the model. Options are {'L1', 'MSE', 
+            'CrossEntropy'}.  
         dataset : str
             The dataset that the model will be trained on. Options are
             {'MNIST'}.
-        optim : str
+        batch_size : int
+            The batch size for the training set
+        cuda : bool
+            If True, cuda will be used instead of cpu
+        optimizer : str
             The optimizer that the model will use while training. Options are
-            {'SGD'}    
+            {'SGD'}
+        learning_rate : float
+            Learning rate for optimizer
+        momentum : float
+            Momentum parameter to accelerate SGD
+        scheduler_step_size : int
+            Number of iterations before applying learning rate scheduler
+        gamma : float
+            Learning rate scheduler factor
+        current_count : int
+            The index of the current parameter count in param_counts
         param_counts : np.array 
             List of parameter counts that the model will be trained over.
             Since this model is an MLP, these counts correspond to N*10^3 
             neurons for a parameter count, N.
-        current_count : int
-            The index of the current parameter count in param_counts
-        losses : dict
-            Dictionary of lists of final losses for each model that 
-            is trained at each parameter count
+        generate_parameters : True
+            Uses a parameter adaptation algorithm to predict the next best model 
+            to train by analyzing the final loss vs hidden layer size of all previous
+            models
+        training_samples : int
+            Desired number of elements from the training set
+        factor : int
+            Multiplier for param_counts. factor * param_counts[i] = number
+            of neurons in hidden layer
+        reuse_weights : True
+            If True, reuses weights from previous model to help next model converge
+            more quickly
+        seed : int
+            Seed for random weight initialization
+        max_epochs : int
+            The max number of iterations to train each model
     """
     
     class MLP(nn.Module):
-        """TEMP DOCSTRING"""
-
+        """An implementation of a 2-layer multilayer perceptron that allows 
+        for changing the number of neurons in the hidden layer"""
+        
         def __init__(self, current_count, data, param_counts, factor, hidden_layer_size):
             super().__init__()
             print(f'Initializing MLP with {hidden_layer_size} hidden units')
@@ -104,7 +128,7 @@ class MultilayerPerceptron(TorchModels):
         def forward(self, x):
             x = x.view(-1, self.data_dims[0] * self.data_dims[1])
             x = F.relu(self.input_layer(x))
-            x = F.sigmoid(self.hidden_layer(x))
+            x = self.hidden_layer(x)
             return x
     
     
@@ -218,12 +242,7 @@ class MultilayerPerceptron(TorchModels):
         is training
 
         ...
-        Parameters
-        ----------
-        num_epochs : 
-            The number of training epochs that the model will train over. One epoch is
-            one full pass through the train and test loaders
-
+        
         Returns
         -------
         model
@@ -232,6 +251,10 @@ class MultilayerPerceptron(TorchModels):
             A list of all training losses at the end of each epoch
         test_acc : list
             A list of all test losses at the end of each epoch
+        zero_one_loss : list 
+            A list of all 0-1 training losses at the end of each epoch
+        zero_one_acc : list 
+            A list of all 0-1 test losses at the end of each epoch
         """
         
         tb_utils = TensorBoardUtils()

@@ -145,8 +145,8 @@ def get_next_param_count(param_counts, losses, past_dd=False, alpha=2):
     # We weight datapoints that are further away from
     # the current parameter count less (1/n) depending on
     # how many indices (n) away it is from the current one
-    w = np.arange(1,len(param_counts) + 1, 1)[-1::-1]
-    w = w/w.sum()
+    w = np.arange(1,len(param_counts) + 1, 1)
+    w = w/w.max()
     
     poly = np.polyfit(param_counts[:], losses[:], 3, w=w)
     
