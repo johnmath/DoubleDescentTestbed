@@ -1,5 +1,5 @@
 import torch
-import honors_work.utils as utils
+import DoubleDescentTestbed.utils as utils
 import numpy as np
 import torchvision
 import torchvision.transforms as transforms
